@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Save, ScanLine } from 'lucide-react';
 
 function InvoiceForm({ liveRates }) {
   const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', address: '' });
-  const [items, setItems] = useState([
-    { id: 1, type: 'gold', description: '', weight: 0, makingCharge: 0, purity: 22 }
-  ]);
-  const [applyGst, setApplyGst] = useState(false);
-  const [totals, setTotals] = useState({ subtotal: 0, gst: 0, total: 0 });
+  const [items, setItems] = useState([]);
+  const [applyGst, setApplyGst] = useState(true); // Smart GST defaults to true
+  const [payment, setPayment] = useState({ cashReceived: 0, cardReceived: 0 });
+  const [totals, setTotals] = useState({ subtotal: 0, gst: 0, total: 0, balance: 0 });
   const [saved, setSaved] = useState(false);
+
+  const [qrInput, setQrInput] = useState('');
+  const qrInputRef = useRef(null);
 
   const handleCustomerChange = (e) => {
     setCustomerInfo({ ...customerInfo, [e.target.name]: e.target.value });
@@ -23,9 +25,28 @@ function InvoiceForm({ liveRates }) {
   };
 
   const removeItem = (id) => {
-    if (items.length > 1) {
-      setItems(items.filter(item => item.id !== id));
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  const handleQrScan = (e) => {
+    e.preventDefault();
+    try {
+      const scannedItem = JSON.parse(qrInput);
+      if (scannedItem.type && scannedItem.weight !== undefined) {
+        setItems([...items, {
+          id: Date.now(),
+          type: scannedItem.type,
+          purity: scannedItem.purity || 22,
+          description: scannedItem.description || 'Scanned Item',
+          weight: Number(scannedItem.weight) || 0,
+          makingCharge: Number(scannedItem.makingCharge) || 0
+        }]);
+      }
+    } catch (err) {
+      console.warn("Invalid QR data", err);
     }
+    setQrInput('');
+    if (qrInputRef.current) qrInputRef.current.focus();
   };
 
   useEffect(() => {
@@ -49,15 +70,22 @@ function InvoiceForm({ liveRates }) {
       subtotal += itemTotal;
     });
 
-    const gst = applyGst ? subtotal * 0.03 : 0; // 3% GST for jewellery in India generally
+    // Smart GST: Usually 3% applies if items exist and toggle is on.
+    // In a real rule-based scenario, this might depend on item type.
+    const gst = applyGst && subtotal > 0 ? subtotal * 0.03 : 0;
     const total = subtotal + gst;
+
+    const cash = Number(payment.cashReceived) || 0;
+    const card = Number(payment.cardReceived) || 0;
+    const balance = total - (cash + card);
 
     setTotals({
       subtotal: Math.round(subtotal * 100) / 100,
       gst: Math.round(gst * 100) / 100,
-      total: Math.round(total * 100) / 100
+      total: Math.round(total * 100) / 100,
+      balance: Math.round(balance * 100) / 100
     });
-  }, [items, applyGst, liveRates]);
+  }, [items, applyGst, liveRates, payment]);
 
   const handleSaveInvoice = async () => {
     if (window.api) {
@@ -68,6 +96,7 @@ function InvoiceForm({ liveRates }) {
         items,
         applyGst,
         totals,
+        payment,
         ratesAtTime: liveRates
       };
 
@@ -75,14 +104,30 @@ function InvoiceForm({ liveRates }) {
       existingData.push(invoiceData);
       const success = await window.api.writeFile('invoices.json', existingData);
 
+      // Update Ledger if there is a balance
+      if (success && totals.balance > 0) {
+        const ledgerData = await window.api.readFile('ledger.json') || [];
+        ledgerData.push({
+          id: Date.now().toString(),
+          invoiceId: invoiceData.id,
+          date: invoiceData.date,
+          customerName: customerInfo.name,
+          customerPhone: customerInfo.phone,
+          amountOwed: totals.balance,
+          status: 'unpaid'
+        });
+        await window.api.writeFile('ledger.json', ledgerData);
+      }
+
       if (success) {
         setSaved(true);
         setTimeout(() => {
           setSaved(false);
           // Reset form
           setCustomerInfo({ name: '', phone: '', address: '' });
-          setItems([{ id: Date.now(), type: 'gold', description: '', weight: 0, makingCharge: 0, purity: 22 }]);
-          setApplyGst(false);
+          setItems([]);
+          setPayment({ cashReceived: 0, cardReceived: 0 });
+          setApplyGst(true);
         }, 2000);
       }
     } else {
@@ -94,6 +139,20 @@ function InvoiceForm({ liveRates }) {
     <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-sm">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800">New Invoice</h2>
+
+        <form onSubmit={handleQrScan} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg border">
+          <ScanLine className="text-gray-500 w-5 h-5" />
+          <input
+            type="text"
+            ref={qrInputRef}
+            value={qrInput}
+            onChange={(e) => setQrInput(e.target.value)}
+            placeholder="Scan QR or paste JSON..."
+            className="bg-transparent border-none focus:ring-0 text-sm w-48"
+          />
+          <button type="submit" className="hidden">Add</button>
+        </form>
+
         <div className="text-sm text-gray-500 text-right">
           <div>Current Gold: ₹{liveRates.gold}/10g</div>
           <div>Current Silver: ₹{liveRates.silver}/1kg</div>
@@ -203,17 +262,45 @@ function InvoiceForm({ liveRates }) {
             </div>
           </div>
         ))}
+        {items.length === 0 && <div className="text-sm text-gray-500 mb-4">No items added. Scan a QR code or add manually.</div>}
         <button
           onClick={addItem}
           className="flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
         >
-          <Plus size={16} className="mr-1" /> Add Item
+          <Plus size={16} className="mr-1" /> Add Manual Item
         </button>
       </div>
 
-      {/* Totals */}
-      <div className="border-t pt-6 flex justify-end">
-        <div className="w-64 space-y-3">
+      {/* Payment & Totals Section */}
+      <div className="border-t pt-6 grid grid-cols-2 gap-8">
+
+        {/* Payment Entry */}
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Payment Details</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cash Received (₹)</label>
+              <input
+                type="number"
+                value={payment.cashReceived || ''}
+                onChange={(e) => setPayment({...payment, cashReceived: parseFloat(e.target.value)})}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Card / UPI Received (₹)</label>
+              <input
+                type="number"
+                value={payment.cardReceived || ''}
+                onChange={(e) => setPayment({...payment, cardReceived: parseFloat(e.target.value)})}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Totals */}
+        <div className="space-y-3">
           <div className="flex justify-between text-gray-600">
             <span>Subtotal:</span>
             <span>₹{totals.subtotal.toFixed(2)}</span>
@@ -235,6 +322,14 @@ function InvoiceForm({ liveRates }) {
           <div className="flex justify-between text-xl font-bold text-gray-800 pt-3 border-t">
             <span>Total:</span>
             <span>₹{totals.total.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-600 pt-2 border-t">
+            <span>Paid:</span>
+            <span>₹{((Number(payment.cashReceived)||0) + (Number(payment.cardReceived)||0)).toFixed(2)}</span>
+          </div>
+          <div className={`flex justify-between font-bold pt-2 ${totals.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <span>Balance Due:</span>
+            <span>₹{Math.max(0, totals.balance).toFixed(2)}</span>
           </div>
         </div>
       </div>

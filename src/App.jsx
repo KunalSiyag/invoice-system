@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import LiveRate from './components/LiveRate';
 import InvoiceForm from './components/InvoiceForm';
 import RecordManagement from './components/RecordManagement';
-import { Settings, FileText, List } from 'lucide-react';
+import QRGenerator from './components/QRGenerator';
+import CustomerLedger from './components/CustomerLedger';
+import { Settings, FileText, List, QrCode, BookOpen } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('invoice');
@@ -53,6 +55,20 @@ function App() {
             Records
           </button>
           <button
+            onClick={() => setActiveTab('qr')}
+            className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'qr' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <QrCode className="w-5 h-5 mr-3" />
+            QR Tags
+          </button>
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'ledger' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <BookOpen className="w-5 h-5 mr-3" />
+            Customer Ledger
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
           >
@@ -66,6 +82,8 @@ function App() {
       <main className="flex-1 overflow-auto p-8">
         {activeTab === 'invoice' && <InvoiceForm liveRates={liveRates} />}
         {activeTab === 'records' && <RecordManagement />}
+        {activeTab === 'qr' && <QRGenerator />}
+        {activeTab === 'ledger' && <CustomerLedger />}
         {activeTab === 'settings' && <LiveRate rates={liveRates} onRateChange={handleRateChange} />}
       </main>
     </div>
