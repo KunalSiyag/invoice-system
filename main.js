@@ -66,3 +66,27 @@ ipcMain.handle('write-file', async (event, filename, data) => {
     return false;
   }
 });
+
+ipcMain.handle('send-sms', async (event, { to, body, credentials }) => {
+  try {
+    // In a real application, you would use a library like 'twilio'
+    // const twilio = require('twilio');
+    // const client = twilio(credentials.accountSid, credentials.authToken);
+    // const message = await client.messages.create({ body, from: credentials.senderNumber, to });
+    // return message.sid;
+
+    console.log('Sending SMS...');
+    console.log('To:', to);
+    console.log('Body:', body);
+    console.log('Credentials:', credentials);
+
+    // Simulating API call delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Simulate success
+    return { success: true, messageId: 'mock-id-' + Date.now() };
+  } catch (error) {
+    console.error('Error sending SMS:', error);
+    return { success: false, error: error.message };
+  }
+});

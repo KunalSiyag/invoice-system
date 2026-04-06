@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Save, ScanLine, Search } from 'lucide-react';
+import { Plus, Trash2, Save, ScanLine, Search, Sparkles } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 
 function InvoiceForm({ liveRates }) {
@@ -8,10 +8,13 @@ function InvoiceForm({ liveRates }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   const [items, setItems] = useState([]);
+  const [customerMetal, setCustomerMetal] = useState({ weight: 0, purity: 22, type: 'gold' });
+  const [gstRate, setGstRate] = useState(3);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const [applyGst, setApplyGst] = useState(true);
   const [payment, setPayment] = useState({ cashReceived: 0, cardReceived: 0 });
   const [creditTerms, setCreditTerms] = useState({ dueDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'), interestRate: 2 });
-  const [totals, setTotals] = useState({ subtotal: 0, gst: 0, total: 0, balance: 0 });
+  const [totals, setTotals] = useState({ subtotal: 0, customerMetalValue: 0, gst: 0, total: 0, balance: 0 });
   const [saved, setSaved] = useState(false);
 
   const [qrInput, setQrInput] = useState('');
@@ -98,10 +101,22 @@ function InvoiceForm({ liveRates }) {
       subtotal += itemTotal;
     });
 
-    // Smart GST: Usually 3% applies if items exist and toggle is on.
-    // In a real rule-based scenario, this might depend on item type.
-    const gst = applyGst && subtotal > 0 ? subtotal * 0.03 : 0;
-    const total = subtotal + gst;
+    // Deduct Customer Provided Metal
+    let customerMetalValue = 0;
+    const cmWeight = parseFloat(customerMetal.weight) || 0;
+    if (cmWeight > 0) {
+      if (customerMetal.type === 'gold') {
+        const baseRatePerGram = (liveRates.gold || 0) / 10;
+        const purityMultiplier = customerMetal.purity === 24 ? 1 : customerMetal.purity === 22 ? 22/24 : customerMetal.purity === 18 ? 18/24 : 1;
+        customerMetalValue = cmWeight * baseRatePerGram * purityMultiplier;
+      } else {
+        customerMetalValue = cmWeight * ((liveRates.silver || 0) / 1000);
+      }
+    }
+
+    const taxableAmount = Math.max(0, subtotal - customerMetalValue);
+    const gst = applyGst ? taxableAmount * (gstRate / 100) : 0;
+    const total = taxableAmount + gst;
 
     const cash = Number(payment.cashReceived) || 0;
     const card = Number(payment.cardReceived) || 0;
@@ -109,11 +124,51 @@ function InvoiceForm({ liveRates }) {
 
     setTotals({
       subtotal: Math.round(subtotal * 100) / 100,
+      customerMetalValue: Math.round(customerMetalValue * 100) / 100,
       gst: Math.round(gst * 100) / 100,
       total: Math.round(total * 100) / 100,
       balance: Math.round(balance * 100) / 100
     });
-  }, [items, applyGst, liveRates, payment]);
+  }, [items, applyGst, liveRates, payment, customerMetal, gstRate]);
+
+  const handleAskAI = async () => {
+    setIsAiLoading(true);
+    try {
+      if (liveRates.apiKey) {
+        // Prepare cart data for AI
+        const prompt = `I have a jewelry cart with the following items: ${JSON.stringify(items.map(i => i.description))}. We are also taking customer old metal of weight ${customerMetal.weight}g. Should the GST be 3% (standard sales) or 5% (job work)? Return ONLY the number 3 or 5 based on standard Indian tax rules.`;
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${liveRates.apiKey}`
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const answer = data.choices[0].message.content.trim();
+          if (answer.includes('5')) setGstRate(5);
+          else if (answer.includes('3')) setGstRate(3);
+        } else {
+          // fallback heuristics if api fails
+          setGstRate(customerMetal.weight > 0 ? 5 : 3);
+        }
+      } else {
+        // Fallback rule if no API key: Job work (taking old metal) often attracts 5% GST, pure sales 3%
+        setGstRate(customerMetal.weight > 0 ? 5 : 3);
+      }
+    } catch (e) {
+      console.warn("AI API Error", e);
+      setGstRate(customerMetal.weight > 0 ? 5 : 3);
+    }
+    setIsAiLoading(false);
+  };
 
   const handleSaveInvoice = async () => {
     if (window.api) {
@@ -149,6 +204,35 @@ function InvoiceForm({ liveRates }) {
       existingData.push(invoiceData);
       const success = await window.api.writeFile('invoices.json', existingData);
 
+      // Deduct from Inventory
+      if (success) {
+        try {
+          const inventoryData = await window.api.readFile('inventory.json') || [];
+          let inventoryUpdated = false;
+
+          const newInventory = inventoryData.map(invItem => {
+            // Find if this inventory item was sold (matching by name/description or ID if we had it)
+            // For robust integration, we should ideally map by an explicit inventory ID.
+            // Since `items` currently uses `description`, we'll try to match by name.
+            const soldItem = items.find(i => i.description === invItem.name || (i.inventoryId && i.inventoryId === invItem.id));
+            if (soldItem) {
+              inventoryUpdated = true;
+              return {
+                ...invItem,
+                quantity: Math.max(0, invItem.quantity - 1) // Assuming 1 qty per line item
+              };
+            }
+            return invItem;
+          });
+
+          if (inventoryUpdated) {
+            await window.api.writeFile('inventory.json', newInventory);
+          }
+        } catch (e) {
+          console.error("Error updating inventory", e);
+        }
+      }
+
       // Update Ledger if there is a balance
       if (success && totals.balance > 0) {
         const ledgerData = await window.api.readFile('ledger.json') || [];
@@ -165,6 +249,21 @@ function InvoiceForm({ liveRates }) {
         await window.api.writeFile('ledger.json', ledgerData);
       }
 
+      // Update Cashbook for received payment
+      if (success && ((Number(payment.cashReceived) || 0) + (Number(payment.cardReceived) || 0) > 0)) {
+        const totalReceived = (Number(payment.cashReceived) || 0) + (Number(payment.cardReceived) || 0);
+        const cashbookData = await window.api.readFile('cashbook.json') || [];
+        cashbookData.push({
+          id: `CB-${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          type: 'income',
+          category: 'Sales',
+          amount: totalReceived,
+          description: `Invoice Payment - ${finalCustomerInfo.name || 'Walk-in'}`
+        });
+        await window.api.writeFile('cashbook.json', cashbookData);
+      }
+
       if (success) {
         setSaved(true);
         setTimeout(() => {
@@ -172,13 +271,48 @@ function InvoiceForm({ liveRates }) {
           // Reset form
           setCustomerInfo({ id: '', name: '', phone: '', address: '' });
           setItems([]);
+          setCustomerMetal({ weight: 0, purity: 22, type: 'gold' });
           setPayment({ cashReceived: 0, cardReceived: 0 });
           setCreditTerms({ dueDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'), interestRate: 2 });
           setApplyGst(true);
+          setGstRate(3);
         }, 2000);
       }
     } else {
       console.warn("Electron API not available");
+    }
+  };
+
+  const handleSendSms = async () => {
+    if (!customerInfo.phone) {
+      alert("Please enter a customer phone number.");
+      return;
+    }
+    if (window.api && window.api.sendSms) {
+      try {
+        const credentials = await window.api.readFile('sms_settings.json');
+        if (!credentials || !credentials.accountSid) {
+          alert("SMS credentials not configured in Settings.");
+          return;
+        }
+
+        const body = `Thank you for shopping with us, ${customerInfo.name}! Your invoice total is ₹${totals.total}. Balance Due: ₹${totals.balance}.`;
+
+        const result = await window.api.sendSms({
+          to: customerInfo.phone,
+          body: body,
+          credentials: credentials
+        });
+
+        if (result && result.success) {
+          alert("SMS Sent Successfully!");
+        } else {
+          alert("Failed to send SMS.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error sending SMS.");
+      }
     }
   };
 
@@ -341,6 +475,48 @@ function InvoiceForm({ liveRates }) {
         </button>
       </div>
 
+      {/* Customer Provided Metal */}
+      <div className="mb-8 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+        <h3 className="text-sm font-semibold text-orange-800 mb-3">Customer Provided Metal (Exchange / Job Work)</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-orange-800 mb-1">Type</label>
+            <select
+              value={customerMetal.type}
+              onChange={(e) => setCustomerMetal({ ...customerMetal, type: e.target.value })}
+              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
+            >
+              <option value="gold">Gold</option>
+              <option value="silver">Silver</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-orange-800 mb-1">Purity</label>
+            <select
+              value={customerMetal.purity}
+              onChange={(e) => setCustomerMetal({ ...customerMetal, purity: parseInt(e.target.value) })}
+              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
+              disabled={customerMetal.type === 'silver'}
+            >
+              <option value={24}>24K</option>
+              <option value={22}>22K</option>
+              <option value={18}>18K</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-orange-800 mb-1">Weight (g)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={customerMetal.weight || ''}
+              onChange={(e) => setCustomerMetal({ ...customerMetal, weight: parseFloat(e.target.value) })}
+              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Payment & Totals Section */}
       <div className="border-t pt-6 grid grid-cols-2 gap-8">
 
@@ -403,16 +579,41 @@ function InvoiceForm({ liveRates }) {
             <span>₹{totals.subtotal.toFixed(2)}</span>
           </div>
 
-          <div className="flex items-center justify-between">
-            <label className="flex items-center text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={applyGst}
-                onChange={(e) => setApplyGst(e.target.checked)}
-                className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              Apply GST (3%)
-            </label>
+          {totals.customerMetalValue > 0 && (
+            <div className="flex justify-between text-orange-600 border-b pb-2">
+              <span>Less: Metal Value</span>
+              <span>- ₹{totals.customerMetalValue.toFixed(2)}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center">
+              <label className="flex items-center text-gray-700 cursor-pointer mr-3">
+                <input
+                  type="checkbox"
+                  checked={applyGst}
+                  onChange={(e) => setApplyGst(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                Apply GST ({gstRate}%)
+              </label>
+              {applyGst && (
+                <button
+                  type="button"
+                  onClick={handleAskAI}
+                  disabled={isAiLoading || items.length === 0}
+                  className={`flex items-center px-2 py-1 text-xs rounded-full border ${
+                    isAiLoading
+                      ? 'bg-gray-100 text-gray-400 border-gray-200'
+                      : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                  }`}
+                  title="Ask AI to recommend GST rate based on cart & metal exchange"
+                >
+                  <Sparkles size={12} className="mr-1" />
+                  {isAiLoading ? 'Thinking...' : 'AI GST'}
+                </button>
+              )}
+            </div>
             <span>₹{totals.gst.toFixed(2)}</span>
           </div>
 
@@ -432,8 +633,15 @@ function InvoiceForm({ liveRates }) {
       </div>
 
       {/* Actions */}
-      <div className="mt-8 flex justify-end items-center">
+      <div className="mt-8 flex justify-end items-center space-x-4">
         {saved && <span className="text-green-600 mr-4 font-medium">Invoice saved successfully!</span>}
+        <button
+          onClick={handleSendSms}
+          type="button"
+          className="flex items-center bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition duration-200 border border-blue-300"
+        >
+          Send SMS Receipt
+        </button>
         <button
           onClick={handleSaveInvoice}
           className="flex items-center bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200"

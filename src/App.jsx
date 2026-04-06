@@ -4,7 +4,10 @@ import InvoiceForm from './components/InvoiceForm';
 import RecordManagement from './components/RecordManagement';
 import QRGenerator from './components/QRGenerator';
 import CustomerLedger from './components/CustomerLedger';
-import { Settings, FileText, List, QrCode, BookOpen } from 'lucide-react';
+import InventoryManager from './components/InventoryManager';
+import SupplierLedger from './components/SupplierLedger';
+import Cashbook from './components/Cashbook';
+import { Settings, FileText, List, QrCode, BookOpen, Package, Truck, DollarSign } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('invoice');
@@ -69,6 +72,27 @@ function App() {
             Customer Ledger
           </button>
           <button
+            onClick={() => setActiveTab('inventory')}
+            className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'inventory' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Package className="w-5 h-5 mr-3" />
+            Inventory
+          </button>
+          <button
+            onClick={() => setActiveTab('supplier')}
+            className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'supplier' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Truck className="w-5 h-5 mr-3" />
+            Supplier Ledger
+          </button>
+          <button
+            onClick={() => setActiveTab('cashbook')}
+            className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'cashbook' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <DollarSign className="w-5 h-5 mr-3" />
+            Cashbook
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center p-3 rounded-lg text-left ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
           >
@@ -84,6 +108,9 @@ function App() {
         {activeTab === 'records' && <RecordManagement />}
         {activeTab === 'qr' && <QRGenerator />}
         {activeTab === 'ledger' && <CustomerLedger />}
+        {activeTab === 'inventory' && <InventoryManager />}
+        {activeTab === 'supplier' && <SupplierLedger />}
+        {activeTab === 'cashbook' && <Cashbook />}
         {activeTab === 'settings' && <LiveRate rates={liveRates} onRateChange={handleRateChange} />}
       </main>
     </div>
