@@ -1,18 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Save, ScanLine } from 'lucide-react';
+import { Plus, Trash2, Save, ScanLine, Search } from 'lucide-react';
+import { addDays, format } from 'date-fns';
 
 function InvoiceForm({ liveRates }) {
-  const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', address: '' });
+  const [customerInfo, setCustomerInfo] = useState({ id: '', name: '', phone: '', address: '' });
+  const [customersList, setCustomersList] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+
   const [items, setItems] = useState([]);
-  const [applyGst, setApplyGst] = useState(true); // Smart GST defaults to true
+  const [applyGst, setApplyGst] = useState(true);
   const [payment, setPayment] = useState({ cashReceived: 0, cardReceived: 0 });
+  const [creditTerms, setCreditTerms] = useState({ dueDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'), interestRate: 2 });
   const [totals, setTotals] = useState({ subtotal: 0, gst: 0, total: 0, balance: 0 });
   const [saved, setSaved] = useState(false);
 
   const [qrInput, setQrInput] = useState('');
   const qrInputRef = useRef(null);
 
-  const handleCustomerChange = (e) => {
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (window.api) {
+        const data = await window.api.readFile('customers.json');
+        if (data && Array.isArray(data)) {
+          setCustomersList(data);
+        }
+      }
+    };
+    loadCustomers();
+  }, []);
+
+  const handleCustomerNameChange = (e) => {
+    const name = e.target.value;
+    setCustomerInfo({ ...customerInfo, name, id: '' }); // Clear ID when typing freely
+    setShowDropdown(name.length > 0);
+  };
+
+  const selectCustomer = (cust) => {
+    setCustomerInfo(cust);
+    setShowDropdown(false);
+  };
+
+  const handleCustomerFieldChange = (e) => {
     setCustomerInfo({ ...customerInfo, [e.target.name]: e.target.value });
   };
 
@@ -89,10 +117,27 @@ function InvoiceForm({ liveRates }) {
 
   const handleSaveInvoice = async () => {
     if (window.api) {
+      // Handle customer creation/update
+      let finalCustomerInfo = { ...customerInfo };
+      let allCustomers = await window.api.readFile('customers.json') || [];
+
+      if (!finalCustomerInfo.id && finalCustomerInfo.name.trim() !== '') {
+        // Create new customer
+        finalCustomerInfo.id = `cust_${Date.now()}`;
+        allCustomers.push(finalCustomerInfo);
+        await window.api.writeFile('customers.json', allCustomers);
+        setCustomersList(allCustomers);
+      } else if (finalCustomerInfo.id) {
+        // Update existing customer info if changed
+        allCustomers = allCustomers.map(c => c.id === finalCustomerInfo.id ? finalCustomerInfo : c);
+        await window.api.writeFile('customers.json', allCustomers);
+        setCustomersList(allCustomers);
+      }
+
       const invoiceData = {
         id: Date.now().toString(),
         date: new Date().toISOString(),
-        customerInfo,
+        customerInfo: finalCustomerInfo,
         items,
         applyGst,
         totals,
@@ -109,12 +154,13 @@ function InvoiceForm({ liveRates }) {
         const ledgerData = await window.api.readFile('ledger.json') || [];
         ledgerData.push({
           id: Date.now().toString(),
+          type: 'invoice',
           invoiceId: invoiceData.id,
           date: invoiceData.date,
-          customerName: customerInfo.name,
-          customerPhone: customerInfo.phone,
+          customerId: finalCustomerInfo.id,
           amountOwed: totals.balance,
-          status: 'unpaid'
+          dueDate: creditTerms.dueDate,
+          interestRate: Number(creditTerms.interestRate)
         });
         await window.api.writeFile('ledger.json', ledgerData);
       }
@@ -124,9 +170,10 @@ function InvoiceForm({ liveRates }) {
         setTimeout(() => {
           setSaved(false);
           // Reset form
-          setCustomerInfo({ name: '', phone: '', address: '' });
+          setCustomerInfo({ id: '', name: '', phone: '', address: '' });
           setItems([]);
           setPayment({ cashReceived: 0, cardReceived: 0 });
+          setCreditTerms({ dueDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'), interestRate: 2 });
           setApplyGst(true);
         }, 2000);
       }
@@ -161,15 +208,38 @@ function InvoiceForm({ liveRates }) {
 
       {/* Customer Info */}
       <div className="grid grid-cols-2 gap-4 mb-8">
-        <div>
+        <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-          <input
-            type="text"
-            name="name"
-            value={customerInfo.name}
-            onChange={handleCustomerChange}
-            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="flex items-center">
+            <input
+              type="text"
+              name="name"
+              value={customerInfo.name}
+              onChange={handleCustomerNameChange}
+              onFocus={() => setShowDropdown(customerInfo.name.length > 0)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              autoComplete="off"
+            />
+            <Search className="absolute right-3 text-gray-400 w-4 h-4" />
+          </div>
+
+          {showDropdown && customersList.length > 0 && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+              {customersList
+                .filter(c => c.name.toLowerCase().includes(customerInfo.name.toLowerCase()))
+                .map(cust => (
+                  <div
+                    key={cust.id}
+                    className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-none"
+                    onClick={() => selectCustomer(cust)}
+                  >
+                    <div className="font-medium text-sm">{cust.name}</div>
+                    <div className="text-xs text-gray-500">{cust.phone}</div>
+                  </div>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
@@ -177,7 +247,7 @@ function InvoiceForm({ liveRates }) {
             type="text"
             name="phone"
             value={customerInfo.phone}
-            onChange={handleCustomerChange}
+            onChange={handleCustomerFieldChange}
             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -187,7 +257,7 @@ function InvoiceForm({ liveRates }) {
             type="text"
             name="address"
             value={customerInfo.address}
-            onChange={handleCustomerChange}
+            onChange={handleCustomerFieldChange}
             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -299,8 +369,35 @@ function InvoiceForm({ liveRates }) {
           </div>
         </div>
 
-        {/* Totals */}
+        {/* Totals & Credit Terms */}
         <div className="space-y-3">
+          {totals.balance > 0 && (
+            <div className="bg-orange-50 p-3 rounded border border-orange-200 mb-4 space-y-2">
+              <h4 className="text-sm font-semibold text-orange-800">Credit Terms</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-orange-800 mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={creditTerms.dueDate}
+                    onChange={(e) => setCreditTerms({...creditTerms, dueDate: e.target.value})}
+                    className="w-full p-1 border border-orange-300 rounded text-sm focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-orange-800 mb-1">Interest Rate (%/mo)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={creditTerms.interestRate}
+                    onChange={(e) => setCreditTerms({...creditTerms, interestRate: e.target.value})}
+                    className="w-full p-1 border border-orange-300 rounded text-sm focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-between text-gray-600">
             <span>Subtotal:</span>
             <span>₹{totals.subtotal.toFixed(2)}</span>
