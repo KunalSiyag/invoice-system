@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Save, ScanLine, Search, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Save, ScanLine, Search, Sparkles, UserPlus, CreditCard, Banknote, Printer } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 
 function InvoiceForm({ liveRates }) {
@@ -316,339 +316,385 @@ function InvoiceForm({ liveRates }) {
     }
   };
 
+  const [activePaymentMethod, setActivePaymentMethod] = useState('card');
+  const [newItemParams, setNewItemParams] = useState({ type: 'gold', purity: 22, weight: '', makingCharge: '' });
+
+  const handleManualPaymentToggle = (method) => {
+    setActivePaymentMethod(method);
+    if (method === 'card') {
+      setPayment({ cashReceived: 0, cardReceived: totals.total });
+    } else {
+      setPayment({ cashReceived: totals.total, cardReceived: 0 });
+    }
+  };
+
+  const handleAddNewItem = () => {
+    setItems([...items, {
+      id: Date.now(),
+      type: newItemParams.type,
+      description: `${newItemParams.purity}K ${newItemParams.type === 'gold' ? 'Gold' : 'Silver'} Item`,
+      weight: parseFloat(newItemParams.weight) || 0,
+      makingCharge: parseFloat(newItemParams.makingCharge) || 0,
+      purity: newItemParams.purity
+    }]);
+    setNewItemParams({ type: 'gold', purity: 22, weight: '', makingCharge: '' });
+  };
+
   return (
-    <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-sm">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">New Invoice</h2>
+    <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto">
 
-        <form onSubmit={handleQrScan} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg border">
-          <ScanLine className="text-gray-500 w-5 h-5" />
-          <input
-            type="text"
-            ref={qrInputRef}
-            value={qrInput}
-            onChange={(e) => setQrInput(e.target.value)}
-            placeholder="Scan QR or paste JSON..."
-            className="bg-transparent border-none focus:ring-0 text-sm w-48"
-          />
-          <button type="submit" className="hidden">Add</button>
-        </form>
+      {/* Left Column - Main Invoice Content */}
+      <div className="flex-1 space-y-6">
 
-        <div className="text-sm text-gray-500 text-right">
-          <div>Current Gold: ₹{liveRates.gold}/10g</div>
-          <div>Current Silver: ₹{liveRates.silver}/1kg</div>
-        </div>
-      </div>
+        {/* Itemized Invoice Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Itemized Invoice</h2>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">Transaction ID: #INV-{Math.floor(1000 + Math.random() * 9000)}</p>
+            </div>
 
-      {/* Customer Info */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <div className="relative">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-          <div className="flex items-center">
-            <input
-              type="text"
-              name="name"
-              value={customerInfo.name}
-              onChange={handleCustomerNameChange}
-              onFocus={() => setShowDropdown(customerInfo.name.length > 0)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-              autoComplete="off"
-            />
-            <Search className="absolute right-3 text-gray-400 w-4 h-4" />
+            <form onSubmit={handleQrScan} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+              <ScanLine className="text-gray-500 w-4 h-4 ml-1" />
+              <input
+                type="text"
+                ref={qrInputRef}
+                value={qrInput}
+                onChange={(e) => setQrInput(e.target.value)}
+                placeholder="Scan Item..."
+                className="bg-transparent border-none focus:ring-0 text-sm w-32 py-1 outline-none"
+              />
+              <button type="submit" className="hidden">Add</button>
+            </form>
           </div>
 
-          {showDropdown && customersList.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-              {customersList
-                .filter(c => c.name.toLowerCase().includes(customerInfo.name.toLowerCase()))
-                .map(cust => (
-                  <div
-                    key={cust.id}
-                    className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-none"
-                    onClick={() => selectCustomer(cust)}
-                  >
-                    <div className="font-medium text-sm">{cust.name}</div>
-                    <div className="text-xs text-gray-500">{cust.phone}</div>
-                  </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-          <input
-            type="text"
-            name="phone"
-            value={customerInfo.phone}
-            onChange={handleCustomerFieldChange}
-            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-          <input
-            type="text"
-            name="address"
-            value={customerInfo.address}
-            onChange={handleCustomerFieldChange}
-            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      {/* Items */}
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-4 border-b pb-2">Items</h3>
-        {items.map((item, index) => (
-          <div key={item.id} className="grid grid-cols-12 gap-4 items-end mb-4 bg-gray-50 p-4 rounded">
+          {/* Quick Add Row */}
+          <div className="grid grid-cols-5 gap-3 mb-6 items-end">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Metal Type</label>
               <select
-                value={item.type}
-                onChange={(e) => handleItemChange(item.id, 'type', e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
+                value={newItemParams.type}
+                onChange={(e) => setNewItemParams({ ...newItemParams, type: e.target.value })}
+                className="w-full p-3 bg-gray-50 border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none"
               >
-                <option value="gold">Gold</option>
+                <option value="gold">Yellow Gold</option>
                 <option value="silver">Silver</option>
               </select>
             </div>
-            {item.type === 'gold' && (
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Purity</label>
-                <select
-                  value={item.purity}
-                  onChange={(e) => handleItemChange(item.id, 'purity', parseInt(e.target.value))}
-                  className="w-full p-2 border border-gray-300 rounded text-sm"
-                >
-                  <option value={24}>24K</option>
-                  <option value={22}>22K</option>
-                  <option value={18}>18K</option>
-                </select>
-              </div>
-            )}
-            <div className={`col-span-${item.type === 'gold' ? '3' : '5'}`}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-              <input
-                type="text"
-                value={item.description}
-                onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
-                placeholder="Item name"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Weight (g)</label>
-              <input
-                type="number"
-                value={item.weight || ''}
-                onChange={(e) => handleItemChange(item.id, 'weight', parseFloat(e.target.value))}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Making Chg (₹)</label>
-              <input
-                type="number"
-                value={item.makingCharge || ''}
-                onChange={(e) => handleItemChange(item.id, 'makingCharge', parseFloat(e.target.value))}
-                className="w-full p-2 border border-gray-300 rounded text-sm"
-              />
-            </div>
-            <div className="col-span-1 flex justify-center pb-1">
-              <button
-                onClick={() => removeItem(item.id)}
-                className="text-red-500 hover:text-red-700 p-1"
-                disabled={items.length === 1}
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Purity</label>
+              <select
+                value={newItemParams.purity}
+                onChange={(e) => setNewItemParams({ ...newItemParams, purity: parseInt(e.target.value) })}
+                className="w-full p-3 bg-gray-50 border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none"
               >
-                <Trash2 size={20} />
+                <option value={24}>999 (24K)</option>
+                <option value={22}>916 (22K)</option>
+                <option value={18}>750 (18K)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Weight (g)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={newItemParams.weight}
+                onChange={(e) => setNewItemParams({ ...newItemParams, weight: e.target.value })}
+                className="w-full p-3 bg-gray-50 border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Making Chg</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={newItemParams.makingCharge}
+                  onChange={(e) => setNewItemParams({ ...newItemParams, makingCharge: e.target.value })}
+                  className="w-full p-3 bg-gray-50 border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none"
+                />
+              </div>
+              <button onClick={handleAddNewItem} className="bg-brand-dark hover:bg-gray-800 text-white rounded-lg p-3 flex-shrink-0 transition-colors h-[44px] flex items-center justify-center w-[44px]">
+                <Plus size={20} />
               </button>
             </div>
           </div>
-        ))}
-        {items.length === 0 && <div className="text-sm text-gray-500 mb-4">No items added. Scan a QR code or add manually.</div>}
-        <button
-          onClick={addItem}
-          className="flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
-        >
-          <Plus size={16} className="mr-1" /> Add Manual Item
-        </button>
-      </div>
 
-      {/* Customer Provided Metal */}
-      <div className="mb-8 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-        <h3 className="text-sm font-semibold text-orange-800 mb-3">Customer Provided Metal (Exchange / Job Work)</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-orange-800 mb-1">Type</label>
-            <select
-              value={customerMetal.type}
-              onChange={(e) => setCustomerMetal({ ...customerMetal, type: e.target.value })}
-              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
-            >
-              <option value="gold">Gold</option>
-              <option value="silver">Silver</option>
-            </select>
+          {/* Item List Header */}
+          <div className="grid grid-cols-12 gap-4 border-b border-gray-100 pb-2 mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-5">Description</div>
+            <div className="col-span-2 text-right">Net Wt</div>
+            <div className="col-span-2 text-right">Rate/g</div>
+            <div className="col-span-3 text-right">Amount</div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-orange-800 mb-1">Purity</label>
-            <select
-              value={customerMetal.purity}
-              onChange={(e) => setCustomerMetal({ ...customerMetal, purity: parseInt(e.target.value) })}
-              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
-              disabled={customerMetal.type === 'silver'}
-            >
-              <option value={24}>24K</option>
-              <option value={22}>22K</option>
-              <option value={18}>18K</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-orange-800 mb-1">Weight (g)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={customerMetal.weight || ''}
-              onChange={(e) => setCustomerMetal({ ...customerMetal, weight: parseFloat(e.target.value) })}
-              className="w-full p-2 border border-orange-300 rounded text-sm focus:ring-orange-500 bg-white"
-              placeholder="0.00"
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* Payment & Totals Section */}
-      <div className="border-t pt-6 grid grid-cols-2 gap-8">
-
-        {/* Payment Entry */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Payment Details</h3>
+          {/* Item List */}
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cash Received (₹)</label>
-              <input
-                type="number"
-                value={payment.cashReceived || ''}
-                onChange={(e) => setPayment({...payment, cashReceived: parseFloat(e.target.value)})}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Card / UPI Received (₹)</label>
-              <input
-                type="number"
-                value={payment.cardReceived || ''}
-                onChange={(e) => setPayment({...payment, cardReceived: parseFloat(e.target.value)})}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            {items.length === 0 && (
+              <div className="py-8 text-center text-gray-400 text-sm bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                No items added. Scan a QR code or add manually.
+              </div>
+            )}
+
+            {items.map((item, index) => {
+              const ratePerGram = item.type === 'gold'
+                ? ((liveRates.gold || 0) / 10) * (item.purity === 24 ? 1 : item.purity === 22 ? 22/24 : item.purity === 18 ? 18/24 : 1)
+                : ((liveRates.silver || 0) / 1000);
+              const amount = (item.weight * ratePerGram) + item.makingCharge;
+
+              return (
+                <div key={item.id} className="grid grid-cols-12 gap-4 items-center bg-gray-50 p-3 rounded-lg border border-gray-100 group relative">
+                  <div className="col-span-5 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded flex-shrink-0 overflow-hidden">
+                      <img src="https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=100&auto=format&fit=crop" alt="Jewelry" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm text-gray-800">{item.description}</div>
+                      <div className="text-[11px] text-gray-500">Stock: #G-881 | {item.purity}K {item.type}</div>
+                    </div>
+                  </div>
+                  <div className="col-span-2 text-right font-medium text-sm text-gray-700">{item.weight.toFixed(3)} g</div>
+                  <div className="col-span-2 text-right text-sm text-gray-600">₹{ratePerGram.toFixed(2)}</div>
+                  <div className="col-span-3 text-right font-bold text-sm text-gray-800">₹{amount.toFixed(2)}</div>
+
+                  <button
+                    onClick={() => removeItem(item.id)}
+                    className="absolute -right-2 -top-2 bg-red-100 text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Totals & Credit Terms */}
-        <div className="space-y-3">
-          {totals.balance > 0 && (
-            <div className="bg-orange-50 p-3 rounded border border-orange-200 mb-4 space-y-2">
-              <h4 className="text-sm font-semibold text-orange-800">Credit Terms</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-orange-800 mb-1">Due Date</label>
-                  <input
-                    type="date"
-                    value={creditTerms.dueDate}
-                    onChange={(e) => setCreditTerms({...creditTerms, dueDate: e.target.value})}
-                    className="w-full p-1 border border-orange-300 rounded text-sm focus:ring-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-orange-800 mb-1">Interest Rate (%/mo)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={creditTerms.interestRate}
-                    onChange={(e) => setCreditTerms({...creditTerms, interestRate: e.target.value})}
-                    className="w-full p-1 border border-orange-300 rounded text-sm focus:ring-orange-500"
-                  />
-                </div>
+        {/* Lower Row: Exchange Metal & AI */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Exchange Metal */}
+          <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 relative overflow-hidden">
+            <div className="flex items-center gap-2 mb-4">
+              <Plus className="w-5 h-5 text-brand-brown" />
+              <h3 className="font-bold text-gray-800 uppercase tracking-wide text-sm">Exchange Metal</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Old Gold Wt (g)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={customerMetal.weight || ''}
+                  onChange={(e) => setCustomerMetal({ ...customerMetal, type: 'gold', weight: parseFloat(e.target.value) })}
+                  className="w-full p-3 bg-white border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none shadow-sm"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Purity (%)</label>
+                <input
+                  type="number"
+                  value={customerMetal.purity === 24 ? 100 : customerMetal.purity === 22 ? 91.6 : 75.0}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    let p = 22;
+                    if (val > 95) p = 24;
+                    else if (val < 80) p = 18;
+                    setCustomerMetal({ ...customerMetal, purity: p });
+                  }}
+                  className="w-full p-3 bg-white border-none rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-brand-brown outline-none shadow-sm"
+                  placeholder="75.0"
+                />
               </div>
             </div>
-          )}
-
-          <div className="flex justify-between text-gray-600">
-            <span>Subtotal:</span>
-            <span>₹{totals.subtotal.toFixed(2)}</span>
+            <p className="text-[11px] text-gray-400 mt-4 italic">
+              Estimated value will be subtracted from Net Payable.
+            </p>
           </div>
 
-          {totals.customerMetalValue > 0 && (
-            <div className="flex justify-between text-orange-600 border-b pb-2">
-              <span>Less: Metal Value</span>
-              <span>- ₹{totals.customerMetalValue.toFixed(2)}</span>
+          {/* Sparkle AI */}
+          <div className="bg-[#fcfaf7] rounded-xl p-5 border border-[#eae1ca] relative">
+            <div className="absolute top-4 right-4 bg-[#e8debe] text-[#786422] text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Live</div>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-5 h-5 text-brand-brown" />
+              <h3 className="font-bold text-gray-800 uppercase tracking-wide text-sm">Sparkle AI</h3>
             </div>
-          )}
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Based on current HSN codes and interstate rules, we recommend {customerMetal.weight > 0 ? '5%' : '3%'} GST + 1% Cess.
+            </p>
+            <button
+              onClick={() => {
+                setApplyGst(true);
+                handleAskAI();
+              }}
+              disabled={isAiLoading}
+              className="w-full py-2.5 bg-[#eae1ca] hover:bg-[#dfd3b3] text-[#786422] rounded-lg text-sm font-bold uppercase tracking-wider transition-colors"
+            >
+              {isAiLoading ? 'Analyzing...' : 'Apply Recommended Tax'}
+            </button>
+          </div>
+        </div>
+      </div>
 
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center">
-              <label className="flex items-center text-gray-700 cursor-pointer mr-3">
+      {/* Right Column - Customer & Summary */}
+      <div className="w-full lg:w-80 space-y-6">
+
+        {/* Customer Profile Card */}
+        <div className="bg-[#262423] rounded-xl p-6 text-white shadow-lg">
+          <h3 className="text-xs font-bold text-[#bba76b] uppercase tracking-widest mb-4">Customer Profile</h3>
+
+          <div className="relative mb-5">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Search or Add New</label>
+            <div className="flex">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  name="name"
+                  value={customerInfo.name}
+                  onChange={handleCustomerNameChange}
+                  onFocus={() => setShowDropdown(customerInfo.name.length > 0)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                  placeholder="Eleanor Whispering"
+                  className="w-full p-3 bg-[#333130] border-none rounded-l-lg text-sm text-white focus:ring-1 focus:ring-[#bba76b] outline-none placeholder-gray-500"
+                  autoComplete="off"
+                />
+              </div>
+              <button className="bg-[#333130] text-gray-400 p-3 rounded-r-lg border-l border-[#403e3d] hover:text-white transition-colors">
+                <UserPlus size={18} />
+              </button>
+            </div>
+
+            {showDropdown && customersList.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-[#333130] border border-[#403e3d] rounded-md shadow-xl max-h-48 overflow-auto">
+                {customersList
+                  .filter(c => c.name.toLowerCase().includes(customerInfo.name.toLowerCase()))
+                  .map(cust => (
+                    <div
+                      key={cust.id}
+                      className="p-3 hover:bg-[#403e3d] cursor-pointer border-b border-[#403e3d] last:border-none"
+                      onClick={() => selectCustomer(cust)}
+                    >
+                      <div className="font-medium text-sm">{cust.name}</div>
+                      <div className="text-xs text-gray-400">{cust.phone}</div>
+                    </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Phone</label>
+              <input
+                type="text"
+                name="phone"
+                value={customerInfo.phone}
+                onChange={handleCustomerFieldChange}
+                placeholder="+44 7700..."
+                className="w-full bg-transparent border-none p-0 text-sm text-gray-300 focus:ring-0 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Loyalty Tier</label>
+              <div className="text-sm font-semibold text-[#d4af37]">Gold Elite</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary & Billing Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Summary & Billing</h3>
+
+          <div className="space-y-4 mb-6 text-sm">
+            <div className="flex justify-between text-gray-600">
+              <span>Subtotal ({items.length} Items)</span>
+              <span className="font-semibold text-gray-800">₹{totals.subtotal.toFixed(2)}</span>
+            </div>
+
+            <div className="flex justify-between text-gray-600">
+              <span className="flex items-center gap-2">
+                GST ({gstRate}%)
                 <input
                   type="checkbox"
                   checked={applyGst}
                   onChange={(e) => setApplyGst(e.target.checked)}
-                  className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="rounded text-brand-brown focus:ring-brand-brown border-gray-300 h-3 w-3"
                 />
-                Apply GST ({gstRate}%)
-              </label>
-              {applyGst && (
-                <button
-                  type="button"
-                  onClick={handleAskAI}
-                  disabled={isAiLoading || items.length === 0}
-                  className={`flex items-center px-2 py-1 text-xs rounded-full border ${
-                    isAiLoading
-                      ? 'bg-gray-100 text-gray-400 border-gray-200'
-                      : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                  }`}
-                  title="Ask AI to recommend GST rate based on cart & metal exchange"
-                >
-                  <Sparkles size={12} className="mr-1" />
-                  {isAiLoading ? 'Thinking...' : 'AI GST'}
-                </button>
-              )}
+              </span>
+              <span className="font-semibold text-gray-800">₹{totals.gst.toFixed(2)}</span>
             </div>
-            <span>₹{totals.gst.toFixed(2)}</span>
+
+            {totals.customerMetalValue > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Old Metal Value</span>
+                <span className="font-semibold text-red-600">-₹{totals.customerMetalValue.toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-between text-xl font-bold text-gray-800 pt-3 border-t">
-            <span>Total:</span>
-            <span>₹{totals.total.toFixed(2)}</span>
+          <div className="border-t border-gray-100 pt-4 mb-6 flex justify-between items-end">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Net Payable</span>
+            <span className="text-2xl font-black text-gray-900 tracking-tight">₹{Math.max(0, totals.total - totals.customerMetalValue).toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-gray-600 pt-2 border-t">
-            <span>Paid:</span>
-            <span>₹{((Number(payment.cashReceived)||0) + (Number(payment.cardReceived)||0)).toFixed(2)}</span>
+
+          <div className="mb-6">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Payment Method</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleManualPaymentToggle('card')}
+                className={`py-3 rounded-lg flex flex-col items-center justify-center gap-2 border-2 transition-colors ${activePaymentMethod === 'card' ? 'border-brand-brown text-brand-brown bg-[#fdfcf9]' : 'border-gray-100 text-gray-500 bg-gray-50 hover:bg-gray-100'}`}
+              >
+                <CreditCard size={20} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Card</span>
+              </button>
+              <button
+                onClick={() => handleManualPaymentToggle('cash')}
+                className={`py-3 rounded-lg flex flex-col items-center justify-center gap-2 border-2 transition-colors ${activePaymentMethod === 'cash' ? 'border-brand-brown text-brand-brown bg-[#fdfcf9]' : 'border-gray-100 text-gray-500 bg-gray-50 hover:bg-gray-100'}`}
+              >
+                <Banknote size={20} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Cash</span>
+              </button>
+            </div>
+
+            {/* Hidden actual inputs managed by the UI state */}
+            {activePaymentMethod === 'cash' ? (
+              <div className="mt-3">
+                <input
+                  type="number"
+                  placeholder="Cash Received Amount..."
+                  value={payment.cashReceived || ''}
+                  onChange={(e) => setPayment({...payment, cashReceived: parseFloat(e.target.value), cardReceived: 0})}
+                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded text-sm outline-none focus:ring-1 focus:ring-brand-brown"
+                />
+              </div>
+            ) : (
+              <div className="mt-3">
+                <input
+                  type="number"
+                  placeholder="Card/UPI Received Amount..."
+                  value={payment.cardReceived || ''}
+                  onChange={(e) => setPayment({...payment, cardReceived: parseFloat(e.target.value), cashReceived: 0})}
+                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded text-sm outline-none focus:ring-1 focus:ring-brand-brown"
+                />
+              </div>
+            )}
           </div>
-          <div className={`flex justify-between font-bold pt-2 ${totals.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-            <span>Balance Due:</span>
-            <span>₹{Math.max(0, totals.balance).toFixed(2)}</span>
-          </div>
+
+          <button
+            onClick={handleSaveInvoice}
+            className="w-full py-4 bg-brand-brown hover:bg-brand-brown-dark text-white rounded-lg font-bold text-sm uppercase tracking-widest transition-colors shadow-md flex items-center justify-center gap-2"
+          >
+            {saved ? 'Saved Successfully!' : 'Complete Sale'}
+          </button>
+
+          <button
+            onClick={handleSendSms}
+            className="w-full mt-3 py-3 text-gray-500 hover:text-gray-800 font-bold text-[10px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+          >
+            <Printer size={14} />
+            Print Quotation & SMS
+          </button>
         </div>
-      </div>
-
-      {/* Actions */}
-      <div className="mt-8 flex justify-end items-center space-x-4">
-        {saved && <span className="text-green-600 mr-4 font-medium">Invoice saved successfully!</span>}
-        <button
-          onClick={handleSendSms}
-          type="button"
-          className="flex items-center bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition duration-200 border border-blue-300"
-        >
-          Send SMS Receipt
-        </button>
-        <button
-          onClick={handleSaveInvoice}
-          className="flex items-center bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200"
-        >
-          <Save size={20} className="mr-2" />
-          Save & Generate
-        </button>
       </div>
     </div>
   );
