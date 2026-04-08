@@ -30,3 +30,5 @@
 [0] 7:44:49 AM [vite] (client) hmr update /src/index.css
 [0] 7:45:20 AM [vite] (client) hmr update /src/App.jsx, /src/index.css
 [0] 7:47:40 AM [vite] (client) hmr update /src/components/InvoiceForm.jsx, /src/index.css
+[0] 8:29:37 AM [vite] (client) hmr update /src/components/QRGenerator.jsx, /src/index.css
+[0] vite exited with code 143

@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { v4 as uuidv4 } from 'uuid';
-import { Printer } from 'lucide-react';
+import { Printer, Camera, Smartphone, Upload } from 'lucide-react';
 
 function QRGenerator() {
+  const fileInputRef = useRef(null);
+  const [localIp, setLocalIp] = useState('');
+  const [showPairing, setShowPairing] = useState(false);
+  const [itemPhoto, setItemPhoto] = useState(null);
+
   const [itemData, setItemData] = useState({
     type: 'gold',
     purity: 22,
@@ -27,8 +32,39 @@ function QRGenerator() {
     qr_id: uuidv4() // A unique ID for the physical tag
   });
 
+  useEffect(() => {
+    // Get local IP for pairing QR
+    if (window.api && window.api.getLocalIp) {
+      window.api.getLocalIp().then(ip => setLocalIp(ip));
+    }
+
+    // Listen for photos from companion app
+    if (window.api && window.api.onPhotoReceived) {
+      const handlePhoto = (photoUrl) => {
+        setItemPhoto(photoUrl);
+        setShowPairing(false); // Hide pairing modal if open
+      };
+      window.api.onPhotoReceived(handlePhoto);
+
+      return () => {
+        window.api.offPhotoReceived(handlePhoto);
+      };
+    }
+  }, []);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setItemPhoto(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -37,7 +73,70 @@ function QRGenerator() {
       <div className="bg-white p-8 rounded-xl shadow-sm print:hidden">
         <h2 className="text-2xl font-bold mb-6 text-gray-800">Generate QR Tag</h2>
 
+        {showPairing && localIp && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-xl max-w-sm w-full text-center relative">
+              <button
+                onClick={() => setShowPairing(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
+              >
+                ✕
+              </button>
+              <h3 className="text-xl font-bold mb-2">Connect Phone</h3>
+              <p className="text-gray-600 mb-6 text-sm">Scan this with your phone's camera to upload a photo directly to this tag.</p>
+              <div className="flex justify-center mb-4">
+                <QRCodeSVG value={`http://${localIp}:3001`} size={200} />
+              </div>
+              <p className="font-mono text-xs text-gray-500 bg-gray-100 p-2 rounded">
+                http://{localIp}:3001
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-3">Item Photo (Optional)</label>
+            <div className="flex flex-wrap gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Upload size={16} className="mr-2" />
+                Upload File
+              </button>
+
+              {window.api && (
+                <button
+                  onClick={() => setShowPairing(true)}
+                  className="flex items-center px-4 py-2 bg-blue-50 border border-blue-200 rounded-md text-sm font-medium text-blue-700 hover:bg-blue-100"
+                >
+                  <Smartphone size={16} className="mr-2" />
+                  Take via Phone
+                </button>
+              )}
+            </div>
+
+            {itemPhoto && (
+              <div className="mt-4 relative inline-block">
+                <img src={itemPhoto} alt="Item" className="h-24 w-24 object-cover rounded-md border border-gray-200" />
+                <button
+                  onClick={() => setItemPhoto(null)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Item Type</label>
             <select
@@ -109,6 +208,11 @@ function QRGenerator() {
 
         {/* Printable Label Area */}
         <div className="border border-dashed border-gray-400 p-4 rounded-lg flex flex-col items-center print:border-solid print:border-black print:w-48">
+          {itemPhoto && (
+            <div className="mb-3 w-full flex justify-center">
+              <img src={itemPhoto} alt="Item" className="w-24 h-24 object-contain print:grayscale" />
+            </div>
+          )}
           <QRCodeSVG value={qrPayload} size={128} />
           <div className="mt-3 text-center text-xs font-medium text-gray-800 font-mono">
             <div>{itemData.description || 'Jewellery Item'}</div>

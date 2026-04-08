@@ -16,3 +16,4 @@ Port 5173 is in use, trying another one...
 7:44:49 AM [vite] (client) hmr update /src/index.css
 7:45:20 AM [vite] (client) hmr update /src/App.jsx, /src/index.css
 7:47:40 AM [vite] (client) hmr update /src/components/InvoiceForm.jsx, /src/index.css
+8:29:37 AM [vite] (client) hmr update /src/components/QRGenerator.jsx, /src/index.css

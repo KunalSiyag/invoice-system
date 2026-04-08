@@ -1,0 +1,13 @@
+
+> app@1.0.0 start
+> concurrently "vite" "wait-on tcp:5173 && cross-env NODE_ENV=development electron ."
+
+[0]
+[0]   VITE v8.0.3  ready in 991 ms
+[0]
+[0]   ➜  Local:   http://localhost:5173/
+[0]   ➜  Network: use --host to expose
+[1] [296571:0408/083605.564723:ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:256] Missing X server or $DISPLAY
+[1] [296571:0408/083605.564826:ERROR:ui/aura/env.cc:246] The platform failed to initialize.  Exiting.
+[1] /app/node_modules/electron/dist/electron exited with signal SIGSEGV
+[1] wait-on tcp:5173 && cross-env NODE_ENV=development electron . exited with code 1

@@ -1,0 +1,17 @@
+
+> app@1.0.0 start
+> concurrently "vite" "wait-on tcp:5173 && cross-env NODE_ENV=development electron ."
+
+[0] Port 5173 is in use, trying another one...
+[0]
+[0]   VITE v8.0.3  ready in 939 ms
+[0]
+[0]   ➜  Local:   http://localhost:5174/
+[0]   ➜  Network: use --host to expose
+[1] [300453:0408/083730.457292:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1] [300453:0408/083730.719289:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1] Companion server running at http://0.0.0.0:3001
+[1] [300453:0408/083731.057420:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[1] [300453:0408/083731.057659:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1] [300453:0408/083731.098991:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[1] [300483:0408/083732.038757:ERROR:gpu/command_buffer/service/context_group.cc:138] ContextResult::kFatalFailure: WebGL1 blocklisted
