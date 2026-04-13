@@ -8,9 +8,18 @@ import InventoryManager from './components/InventoryManager';
 import SupplierLedger from './components/SupplierLedger';
 import Cashbook from './components/Cashbook';
 import { Settings, FileText, List, QrCode, BookOpen, Package, Truck, DollarSign, LayoutDashboard, HelpCircle, Bell, Search, Sparkles } from 'lucide-react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 
 function App() {
   const [activeTab, setActiveTab] = useState('invoice');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Hook into the scroll of the main content area
+  const scrollRef = React.useRef(null);
+  const { scrollYProgress } = useScroll({ container: scrollRef });
+
+  // Twist rotation from 0 to 360 degrees based on scroll progress
+  const logoRotation = useTransform(scrollYProgress, [0, 1], [0, 360]);
   const [liveRates, setLiveRates] = useState({ gold: 0, silver: 0 });
 
   useEffect(() => {
@@ -36,15 +45,31 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-brand-bg font-sans text-gray-800">
+    <div className="flex h-screen bg-brand-bg font-sans text-gray-800 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-[280px] bg-sidebar-bg border-r border-gray-200 flex flex-col relative z-20">
-        <div className="p-8 pb-4">
-          <h1 className="text-xl font-bold tracking-widest text-gray-900 uppercase">THE VAULT</h1>
-          <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider">Flagship Boutique</p>
+      <motion.aside
+        initial={{ width: 280 }}
+        animate={{ width: isSidebarOpen ? 280 : 0 }}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
+        className="bg-sidebar-bg border-r border-gray-200 flex flex-col relative z-20 overflow-hidden"
+      >
+        <div className="p-8 pb-4 min-w-[280px]">
+          <div className="flex items-center">
+            {/* Animated Naqshi Logo */}
+            <motion.div
+              style={{ rotate: logoRotation }}
+              className="mr-3 w-8 h-8 rounded-full border-2 border-brand-brown flex items-center justify-center font-bold text-brand-brown"
+            >
+              N
+            </motion.div>
+            <div>
+              <h1 className="text-xl font-bold tracking-widest text-gray-900 uppercase">NAQSHI</h1>
+              <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider">Flagship Boutique</p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 mt-6 px-4 space-y-1">
+        <nav className="flex-1 mt-6 px-4 space-y-1 min-w-[280px]">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center px-4 py-3 text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-brand-bg border-r-4 border-brand-brown text-brand-brown' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'} rounded-l-md`}
@@ -128,14 +153,37 @@ function App() {
             SUPPORT
           </button>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-20 bg-white border-b border-gray-100 flex items-center px-8 justify-between shrink-0 z-10 shadow-sm">
-          <div className="flex-1 flex items-center">
-            <div className="relative w-full max-w-md">
+        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10 shrink-0">
+          <div className="flex items-center gap-4 flex-1 max-w-2xl">
+            {/* Animated Cross Line / Hamburger Menu Toggle */}
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="w-10 h-10 flex flex-col items-center justify-center gap-1.5 rounded-md hover:bg-gray-100 transition-colors z-50 focus:outline-none"
+              aria-label="Toggle Sidebar"
+            >
+              <motion.span
+                animate={isSidebarOpen ? { rotate: 45, y: 8 } : { rotate: 0, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="w-6 h-0.5 bg-gray-600 block"
+              />
+              <motion.span
+                animate={isSidebarOpen ? { opacity: 0 } : { opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="w-6 h-0.5 bg-gray-600 block"
+              />
+              <motion.span
+                animate={isSidebarOpen ? { rotate: -45, y: -8 } : { rotate: 0, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="w-6 h-0.5 bg-gray-600 block"
+              />
+            </button>
+
+            <div className="relative w-full max-w-md ml-2">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-gray-400" />
               </div>
@@ -182,8 +230,8 @@ function App() {
         </header>
 
         {/* Main Viewport */}
-        <main className="flex-1 overflow-auto p-6 md:p-8 bg-brand-bg">
-          {activeTab === 'dashboard' && <div className="text-center mt-20 text-gray-500">Dashboard coming soon...</div>}
+        <main ref={scrollRef} className="flex-1 overflow-auto p-6 md:p-8 bg-brand-bg">
+          {activeTab === 'dashboard' && <div className="text-center mt-20 text-gray-500 min-h-[150vh]">Dashboard coming soon...</div>}
           {activeTab === 'invoice' && <InvoiceForm liveRates={liveRates} />}
           {activeTab === 'records' && <RecordManagement />}
           {activeTab === 'qr' && <QRGenerator />}
